@@ -1,0 +1,38 @@
+{
+  "semantic_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "aspect_descriptions": {
+    "Product Quality": [
+      "The product quality is excellent or poor",
+      "The product is defective or durable",
+      "The product works well or badly"
+    ],
+    "Delivery": [
+      "Delivery was fast or late",
+      "Shipping was delayed",
+      "The order arrived on time"
+    ],
+    "Packaging": [
+      "The packaging was damaged",
+      "The product was packed securely",
+      "The box arrived broken"
+    ],
+    "Price and Value": [
+      "The product is too expensive",
+      "The price is affordable",
+      "The product is worth the money"
+    ],
+    "Skin Reaction": [
+      "The product irritated my skin",
+      "The product caused an allergic reaction",
+      "The product was gentle on my skin"
+    ],
+    "Customer Service": [
+      "Customer support was helpful",
+      "The seller ignored my complaint",
+      "The return and refund experience"
+    ]
+  },
+  "aspect_similarity_threshold": 0.42,
+  "mismatch_confidence_threshold": 0.6,
+  "version": "2.0"
+}
