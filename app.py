@@ -1,6 +1,6 @@
 """MarketMind Intelligence V2 — standalone Gradio deployment.
 
-Customer sentiment and aspects use trained review models and semantic similarity.
+Customer sentiment uses trained review models; aspects use lightweight keyword rules.
 Demand and inventory use simulated business data; outputs are illustrative.
 """
 import json
@@ -12,7 +12,6 @@ import gradio as gr
 import joblib
 import numpy as np
 import pandas as pd
-from sentence_transformers import SentenceTransformer, util
 
 ROOT = Path(__file__).resolve().parent
 MODELS = ROOT / "models"
@@ -34,16 +33,16 @@ loaded_demand_model = joblib.load(MODELS / "demand_prediction_model.pkl")
 
 # Load original theme models as part of the exported V1 assets.
 # Customer Intelligence V2 uses semantic aspect matching instead of theme clusters.
-theme_vectorizer = joblib.load(MODELS / "theme_vectorizer.pkl")
-kmeans_model = joblib.load(MODELS / "kmeans_model.pkl")
 
-semantic_model = SentenceTransformer(v2_config["semantic_model"])
-ASPECTS = v2_config["aspect_descriptions"]
-aspect_embeddings = {
-    aspect: semantic_model.encode(
-        descriptions, convert_to_tensor=True, normalize_embeddings=True
-    )
-    for aspect, descriptions in ASPECTS.items()
+# Lightweight aspect matcher: no torch, sentence-transformers or embeddings.
+# Rules are illustrative, not equivalent to semantic similarity.
+ASPECT_TERMS = {
+    "Product Quality": ("quality", "defect", "broken", "durable", "work", "perform", "product", "item", "formula", "texture"),
+    "Delivery": ("deliver", "shipping", "ship", "arriv", "courier", "late", "delay", "dispatch"),
+    "Packaging": ("packag", "pack", "box", "seal", "wrap", "bottle", "leak"),
+    "Price and Value": ("price", "cost", "expens", "afford", "value", "worth", "money", "cheap", "overpric"),
+    "Skin Reaction": ("skin", "irritat", "allerg", "rash", "redness", "breakout", "itch", "gentle", "acne"),
+    "Customer Service": ("support", "service", "seller", "refund", "return", "complaint", "helpdesk", "representative"),
 }
 
 def split_review(review):
@@ -62,34 +61,24 @@ def predict_text_sentiment(text):
     return sentiment, confidence
 
 def detect_aspects(review, threshold=None):
-    if threshold is None:
-        threshold = float(v2_config["aspect_similarity_threshold"])
+    # Deterministic keyword matching, with evidence and per-clause sentiment.
     results = []
-
     for sentence in split_review(review):
-        embedding = semantic_model.encode(
-            sentence,
-            convert_to_tensor=True,
-            normalize_embeddings=True
-        )
-
-        sentiment, confidence = predict_text_sentiment(sentence)
-
-        for aspect, reference_embeddings in aspect_embeddings.items():
-            score = util.cos_sim(
-                embedding,
-                reference_embeddings
-            ).max().item()
-
-            if score >= threshold:
+        tokens = re.findall(r"[a-z]+", sentence.lower())
+        matched = []
+        for aspect, stems in ASPECT_TERMS.items():
+            if any(token.startswith(stem) for token in tokens for stem in stems):
+                matched.append(aspect)
+        if matched:
+            sentiment, confidence = predict_text_sentiment(sentence)
+            for aspect in matched:
                 results.append({
                     "Aspect": aspect,
                     "Sentiment": sentiment,
-                    "Similarity": round(float(score), 3),
+                    "Similarity": 1.0,  # compatibility field; 1 means keyword match, NOT cosine similarity
                     "Confidence": round(confidence, 3),
-                    "Evidence": sentence
+                    "Evidence": sentence,
                 })
-
     return results
 
 def check_rating_mismatch(sentiment, rating, confidence):
@@ -320,8 +309,8 @@ def website_customer_analysis_v2(review, rating):
         ]
 
         explanation = (
-            "Review-specific aspect matches are shown "
-            "with their supporting text. "
+            "Review-specific keyword-based aspect matches are shown "
+            "with supporting text. Match=1 means a keyword was found, not semantic similarity. "
             "Model probabilities are not calibrated."
         )
 
@@ -435,11 +424,11 @@ with gr.Blocks(title='MarketMind | Business Intelligence') as marketmind_app:
         aspect_output = gr.Dataframe(
             headers=[
                 'Aspect', 'Sentiment',
-                'Similarity', 'Evidence'
+                'Keyword Match', 'Evidence'
             ],
             datatype=['str', 'str', 'number', 'str'],
             interactive=False,
-            label='Review-Specific Aspects'
+            label='Review-Specific Aspects (Keyword-Based)'
         )
 
         explanation_output = gr.Textbox(
@@ -487,6 +476,6 @@ with gr.Blocks(title='MarketMind | Business Intelligence') as marketmind_app:
 if __name__ == "__main__":
     marketmind_app.launch(
         server_name="0.0.0.0",
-        server_port=int(os.environ.get("PORT", "7860")),
+        server_port=int(os.environ.get("PORT", "10000")),
         show_error=True
     )
